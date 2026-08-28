@@ -1,0 +1,6 @@
+# the built binary, which shares its name with the module
+/mf
+
+# local Claude Code settings and experiments; the shared instructions for
+# this repo live in CLAUDE.md at the root
+.claude/
