@@ -1,205 +1,240 @@
 package cmd
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mikiobraun/mf/internal/store"
-	"github.com/spf13/cobra"
 )
-
-// picker builds a bare command wired to a canned stdin, returning the writer
-// the prompt draws on so a test can assert what the user saw.
-func picker(input string) (*cobra.Command, *strings.Builder) {
-	c := &cobra.Command{}
-	shown := new(strings.Builder)
-	c.SetIn(strings.NewReader(input))
-	c.SetOut(new(strings.Builder))
-	c.SetErr(shown)
-	return c, shown
-}
 
 var threeIDs = []string{"anthropic/claude-opus-4", "gemini/gemini-2.5-flash", "openai/gpt-4o"}
 
-func TestPickModelByNumber(t *testing.T) {
-	c, _ := picker("2\n")
-	got, err := pickModel(c, "gw", threeIDs)
-	if err != nil {
-		t.Fatal(err)
+// send feeds messages to the model in order and returns the state they left.
+func send(p picker, msgs ...tea.Msg) picker {
+	for _, msg := range msgs {
+		next, _ := p.Update(msg)
+		p = next.(picker)
 	}
-	if got != "gemini/gemini-2.5-flash" {
-		t.Errorf("picked %q, want gemini/gemini-2.5-flash", got)
-	}
+	return p
 }
 
-// A filter renumbers the list, so the number that follows refers to what is on
-// screen rather than to the original positions.
-func TestPickModelFilterThenNumber(t *testing.T) {
-	c, shown := picker("openai\n1\n")
-	got, err := pickModel(c, "gw", threeIDs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "openai/gpt-4o" {
-		t.Errorf("picked %q, want openai/gpt-4o", got)
-	}
-	if !strings.Contains(shown.String(), "3 models on gw") {
-		t.Errorf("header missing the count and endpoint:\n%s", shown)
-	}
-}
+func typed(s string) tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
-func TestPickModelFilterIsCaseInsensitive(t *testing.T) {
-	c, _ := picker("GEMINI\n1\n")
-	got, err := pickModel(c, "gw", threeIDs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "gemini/gemini-2.5-flash" {
-		t.Errorf("picked %q, want gemini/gemini-2.5-flash", got)
-	}
-}
+func pressed(t tea.KeyType) tea.Msg { return tea.KeyMsg{Type: t} }
 
-// A filter is replaced, not stacked, so a second one cannot strand the user
-// with an empty list they have to back out of.
-func TestASecondFilterReplacesTheFirst(t *testing.T) {
-	c, _ := picker("gemini\nopenai\n1\n")
-	got, err := pickModel(c, "gw", threeIDs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "openai/gpt-4o" {
-		t.Errorf("picked %q, want openai/gpt-4o", got)
-	}
-}
-
-func TestPickModelRejectsOutOfRange(t *testing.T) {
-	c, shown := picker("99\n1\n")
-	got, err := pickModel(c, "gw", threeIDs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != threeIDs[0] {
-		t.Errorf("picked %q, want %q", got, threeIDs[0])
-	}
-	if !strings.Contains(shown.String(), "between 1 and 3") {
-		t.Errorf("out-of-range message missing:\n%s", shown)
-	}
-}
-
-func TestPickModelFilterMissKeepsTheList(t *testing.T) {
-	c, shown := picker("zzz\n2\n")
-	got, err := pickModel(c, "gw", threeIDs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "gemini/gemini-2.5-flash" {
-		t.Errorf("picked %q, want gemini/gemini-2.5-flash", got)
-	}
-	if !strings.Contains(shown.String(), `nothing matches "zzz"`) {
-		t.Errorf("miss not reported:\n%s", shown)
-	}
-}
-
-// Running out of input is an error rather than a default pick, so a scripted
-// `mf add` with no model ID cannot silently choose one. This is what ctrl-D
-// does at a terminal.
-func TestPickModelWithNoInputSelectsNothing(t *testing.T) {
-	c, _ := picker("")
-	if _, err := pickModel(c, "gw", threeIDs); !errors.Is(err, errNoSelection) {
-		t.Errorf("err = %v, want errNoSelection", err)
-	}
-}
-
-// An empty line is the way out that needs no control key, and it cannot
-// collide with a filter, since an empty filter would match everything.
-func TestPickModelEmptyLineCancels(t *testing.T) {
-	c, shown := picker("\n1\n")
-	if _, err := pickModel(c, "gw", threeIDs); !errors.Is(err, errNoSelection) {
-		t.Errorf("err = %v, want errNoSelection", err)
-	}
-	if !strings.Contains(shown.String(), "enter alone to cancel") {
-		t.Errorf("the prompt does not say how to cancel:\n%s", shown)
-	}
-}
-
-// main turns SIGINT into a cancelled context, so ctrl-C has to leave the
-// picker through the context rather than through the blocked read.
-func TestPickModelStopsOnACancelledContext(t *testing.T) {
-	// A pipe nobody writes to stands in for a user who types nothing, so the
-	// context is the only branch that can fire.
-	pr, pw := io.Pipe()
-	t.Cleanup(func() { pw.Close() })
-
-	c := &cobra.Command{}
-	c.SetIn(pr)
-	c.SetOut(new(strings.Builder))
-	c.SetErr(new(strings.Builder))
-	ctx, cancel := context.WithCancel(context.Background())
-	c.SetContext(ctx)
-	cancel()
-
-	if _, err := pickModel(c, "gw", threeIDs); !errors.Is(err, errNoSelection) {
-		t.Errorf("err = %v, want errNoSelection", err)
-	}
-}
-
-func TestPickModelNeedsSomethingToPickFrom(t *testing.T) {
-	c, _ := picker("1\n")
-	_, err := pickModel(c, "gw", nil)
-	if err == nil || !strings.Contains(err.Error(), "no models") {
-		t.Errorf("err = %v, want a complaint about an empty list", err)
-	}
-}
-
-// Long lists are paged, and a number past the page is still valid because the
-// numbering runs over every match.
-func TestPickModelPagesLongLists(t *testing.T) {
+// manyIDs builds a list long enough to scroll.
+func manyIDs(n int) []string {
 	var ids []string
-	for i := 1; i <= 25; i++ {
+	for i := 1; i <= n; i++ {
 		ids = append(ids, fmt.Sprintf("model-%02d", i))
 	}
-	c, shown := picker("25\n")
-	got, err := pickModel(c, "gw", ids)
-	if err != nil {
-		t.Fatal(err)
+	return ids
+}
+
+func TestPickerFiltersAsYouType(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), typed("g"), typed("e"), typed("m"))
+	if p.filter != "gem" {
+		t.Errorf("filter = %q, want gem", p.filter)
 	}
-	if got != "model-25" {
-		t.Errorf("picked %q, want model-25", got)
-	}
-	out := shown.String()
-	if !strings.Contains(out, "(5 more; type a filter to narrow)") {
-		t.Errorf("page footer missing:\n%s", out)
-	}
-	if strings.Contains(out, "model-21") {
-		t.Errorf("listed past the page size:\n%s", out)
+	if len(p.matches) != 1 || p.matches[0] != "gemini/gemini-2.5-flash" {
+		t.Errorf("matches = %v, want the one gemini entry", p.matches)
 	}
 }
 
-func TestPickNumber(t *testing.T) {
-	cases := map[string]struct {
-		n  int
-		ok bool
-	}{
-		"3":    {3, true},
-		"12":   {12, true},
-		"4o":   {0, false},
-		"":     {0, false},
-		"-1":   {0, false},
-		"3.5":  {0, false},
-		"v1":   {0, false},
-		" 3":   {0, false}, // callers trim, so a space means a filter
-		"gpt4": {0, false},
+func TestPickerFilterIsCaseInsensitive(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), typed("GEM"))
+	if len(p.matches) != 1 {
+		t.Errorf("matches = %v, want 1", p.matches)
 	}
-	for in, want := range cases {
-		n, ok := pickNumber(in)
-		if n != want.n || ok != want.ok {
-			t.Errorf("pickNumber(%q) = (%d, %v), want (%d, %v)", in, n, ok, want.n, want.ok)
+}
+
+func TestPickerBackspaceWidensTheList(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), typed("gem"), pressed(tea.KeyBackspace), pressed(tea.KeyBackspace))
+	if p.filter != "g" {
+		t.Errorf("filter = %q, want g", p.filter)
+	}
+	// "g" is in gemini and in openai/gpt, but not in anthropic/claude-opus-4.
+	if len(p.matches) != 2 {
+		t.Errorf("matches = %v, want 2", p.matches)
+	}
+}
+
+func TestPickerBackspaceOnAnEmptyFilterDoesNothing(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), pressed(tea.KeyBackspace))
+	if p.filter != "" || len(p.matches) != 3 {
+		t.Errorf("filter = %q, matches = %v", p.filter, p.matches)
+	}
+}
+
+// A new filter invalidates the old cursor position, so it starts from the top.
+func TestPickerFilteringResetsTheCursor(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), pressed(tea.KeyDown), pressed(tea.KeyDown))
+	if p.cursor != 2 {
+		t.Fatalf("cursor = %d, want 2", p.cursor)
+	}
+	p = send(p, typed("a"))
+	if p.cursor != 0 {
+		t.Errorf("cursor = %d after filtering, want 0", p.cursor)
+	}
+}
+
+func TestPickerCursorStopsAtBothEnds(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), pressed(tea.KeyUp), pressed(tea.KeyUp))
+	if p.cursor != 0 {
+		t.Errorf("cursor = %d at the top, want 0", p.cursor)
+	}
+	p = send(p, pressed(tea.KeyDown), pressed(tea.KeyDown), pressed(tea.KeyDown), pressed(tea.KeyDown))
+	if p.cursor != 2 {
+		t.Errorf("cursor = %d at the bottom, want 2", p.cursor)
+	}
+}
+
+func TestPickerEnterTakesTheCursorsMatch(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), pressed(tea.KeyDown), pressed(tea.KeyEnter))
+	if p.chosen != "gemini/gemini-2.5-flash" {
+		t.Errorf("chosen = %q, want gemini/gemini-2.5-flash", p.chosen)
+	}
+}
+
+func TestPickerEnterWithNoMatchesChoosesNothing(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), typed("zzz"), pressed(tea.KeyEnter))
+	if p.chosen != "" {
+		t.Errorf("chosen = %q, want nothing", p.chosen)
+	}
+	if !p.done {
+		t.Error("enter should still end the picker")
+	}
+}
+
+func TestPickerEscapeAndCtrlCChooseNothing(t *testing.T) {
+	for name, key := range map[string]tea.KeyType{"esc": tea.KeyEsc, "ctrl-c": tea.KeyCtrlC} {
+		p := send(newPicker("gw", threeIDs), pressed(tea.KeyDown), pressed(key))
+		if p.chosen != "" {
+			t.Errorf("%s: chosen = %q, want nothing", name, p.chosen)
+		}
+		if !p.done {
+			t.Errorf("%s: should end the picker", name)
+		}
+	}
+}
+
+// The window follows the cursor down and back up, moving no further than it
+// has to.
+func TestPickerScrollsToFollowTheCursor(t *testing.T) {
+	p := send(newPicker("gw", manyIDs(25)), tea.WindowSizeMsg{Width: 80, Height: 11})
+	if p.rows != 6 {
+		t.Fatalf("rows = %d, want 6", p.rows)
+	}
+	for i := 0; i < 5; i++ {
+		p = send(p, pressed(tea.KeyDown))
+	}
+	if p.cursor != 5 || p.offset != 0 {
+		t.Errorf("cursor = %d, offset = %d; the last visible row should not scroll", p.cursor, p.offset)
+	}
+	p = send(p, pressed(tea.KeyDown))
+	if p.cursor != 6 || p.offset != 1 {
+		t.Errorf("cursor = %d, offset = %d; want the window moved by one", p.cursor, p.offset)
+	}
+	for i := 0; i < 6; i++ {
+		p = send(p, pressed(tea.KeyUp))
+	}
+	if p.cursor != 0 || p.offset != 0 {
+		t.Errorf("cursor = %d, offset = %d; want the window back at the top", p.cursor, p.offset)
+	}
+}
+
+// Filtering down to fewer entries than the window must not leave the window
+// scrolled past them.
+func TestPickerScrollDoesNotStrandAShortList(t *testing.T) {
+	p := send(newPicker("gw", manyIDs(25)), tea.WindowSizeMsg{Width: 80, Height: 11})
+	for i := 0; i < 20; i++ {
+		p = send(p, pressed(tea.KeyDown))
+	}
+	if p.offset == 0 {
+		t.Fatal("expected the window to have scrolled")
+	}
+	p = send(p, typed("model-01"))
+	if p.offset != 0 || p.cursor != 0 {
+		t.Errorf("offset = %d, cursor = %d, want both at 0", p.offset, p.cursor)
+	}
+}
+
+func TestViewportRowsStaysWithinBounds(t *testing.T) {
+	cases := map[int]int{
+		4:   pickMinRows,
+		9:   pickMinRows,
+		12:  7,
+		15:  pickMaxRows,
+		200: pickMaxRows,
+	}
+	for height, want := range cases {
+		if got := viewportRows(height); got != want {
+			t.Errorf("viewportRows(%d) = %d, want %d", height, got, want)
+		}
+	}
+}
+
+func TestPickerViewMarksTheCursorAndShowsTheFilter(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), typed("o"), pressed(tea.KeyDown))
+	view := p.View()
+	if !strings.Contains(view, "> openai/gpt-4o") {
+		t.Errorf("the cursor line is not marked:\n%s", view)
+	}
+	if !strings.Contains(view, "2 of 3 models on gw") {
+		t.Errorf("the header does not show the filtered count:\n%s", view)
+	}
+	if !strings.Contains(view, "esc cancels") {
+		t.Errorf("the key hints are missing:\n%s", view)
+	}
+}
+
+func TestPickerViewSaysWhenNothingMatches(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), typed("zzz"))
+	if !strings.Contains(p.View(), "nothing matches") {
+		t.Errorf("view does not report an empty list:\n%s", p.View())
+	}
+}
+
+// The view keeps a fixed height so the filter field does not jump about while
+// the match count changes under it.
+func TestPickerViewHeightIsConstant(t *testing.T) {
+	p := send(newPicker("gw", manyIDs(25)), tea.WindowSizeMsg{Width: 80, Height: 24})
+	full := strings.Count(p.View(), "\n")
+	narrowed := strings.Count(send(p, typed("model-01")).View(), "\n")
+	empty := strings.Count(send(p, typed("zzz")).View(), "\n")
+	if full != narrowed || full != empty {
+		t.Errorf("heights differ: %d full, %d narrowed, %d empty", full, narrowed, empty)
+	}
+}
+
+func TestPickerViewIsEmptyOnceDone(t *testing.T) {
+	p := send(newPicker("gw", threeIDs), pressed(tea.KeyEnter))
+	if p.View() != "" {
+		t.Errorf("view should be erased on exit, got %q", p.View())
+	}
+}
+
+func TestFit(t *testing.T) {
+	cases := []struct {
+		in   string
+		w    int
+		want string
+	}{
+		{"short", 10, "short"},
+		{"exactly-10", 10, "exactly-10"},
+		{"truncate-me", 6, "trunc…"},
+		{"anything", 0, "anything"},
+		{"anything", -4, "anything"},
+		{"x", 1, "x"},
+		{"xy", 1, "…"},
+	}
+	for _, c := range cases {
+		if got := fit(c.in, c.w); got != c.want {
+			t.Errorf("fit(%q, %d) = %q, want %q", c.in, c.w, got, c.want)
 		}
 	}
 }
@@ -217,7 +252,7 @@ func TestFilterIDs(t *testing.T) {
 }
 
 // storeWithEndpoint writes a config directory holding one endpoint pointed at
-// srv, and returns the directory.
+// url, and returns the directory.
 func storeWithEndpoint(t *testing.T, url string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -242,40 +277,69 @@ func modelListServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// runWith executes the tree with a canned stdin, returning stdout and the error.
-func runWith(t *testing.T, stdin string, args ...string) (string, error) {
+// withEntry adds a model entry to the store in dir.
+func withEntry(t *testing.T, dir string, m store.Model) {
+	t.Helper()
+	s, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.PutModel(m)
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// runIn executes the tree against a config directory, returning stdout and the
+// error. Tests run without a terminal, which is what the picker refuses on.
+func runIn(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	root := NewRootCmd()
 	root.SetArgs(args)
-	root.SetIn(strings.NewReader(stdin))
 	out := new(strings.Builder)
 	root.SetOut(out)
 	root.SetErr(new(strings.Builder))
 	return out.String(), root.Execute()
 }
 
-func TestAddPicksTheModelWhenTheIDIsOmitted(t *testing.T) {
+// The picker draws; it cannot run down a pipe, so it says so instead of
+// hanging or half-drawing.
+func TestAddRefusesToPickWithoutATerminal(t *testing.T) {
 	dir := storeWithEndpoint(t, modelListServer(t).URL)
-
-	if _, err := runWith(t, "gemini\n1\n", "--config", dir, "add", "fast", "gw"); err != nil {
-		t.Fatal(err)
+	_, err := runIn(t, "--config", dir, "add", "fast", "gw")
+	if err == nil || !strings.Contains(err.Error(), "needs a terminal") {
+		t.Errorf("err = %v, want a complaint about the terminal", err)
 	}
-
-	s, err := store.Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, ok := s.Model("fast")
-	if !ok {
-		t.Fatal("fast was not written")
-	}
-	if m.Model != "gemini/gemini-2.5-flash" {
-		t.Errorf("model = %q, want gemini/gemini-2.5-flash", m.Model)
+	if !strings.Contains(fmt.Sprint(err), "pass the model ID as an argument") {
+		t.Errorf("the error should say what to do instead: %v", err)
 	}
 }
 
-// A name clash is local, so it must be reported before the user is asked to
-// choose from a list that would be thrown away.
+func TestSetModelRefusesToPickWithoutATerminal(t *testing.T) {
+	dir := storeWithEndpoint(t, modelListServer(t).URL)
+	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
+
+	_, err := runIn(t, "--config", dir, "set", "fast", "model")
+	if err == nil || !strings.Contains(err.Error(), "needs a terminal") {
+		t.Errorf("err = %v, want a complaint about the terminal", err)
+	}
+}
+
+// With a terminal available the endpoint is still consulted, so an empty list
+// is reported before anything is drawn.
+func TestPickModelRejectsAnEmptyList(t *testing.T) {
+	restore := isTerminal
+	isTerminal = func() bool { return true }
+	t.Cleanup(func() { isTerminal = restore })
+
+	_, err := pickModel(NewRootCmd(), "gw", nil)
+	if err == nil || !strings.Contains(err.Error(), "no models") {
+		t.Errorf("err = %v, want a complaint about an empty list", err)
+	}
+}
+
+// A name clash is local, so it must be reported before the endpoint is asked
+// for a list that would be thrown away.
 func TestAddChecksTheNameBeforePrompting(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -285,13 +349,9 @@ func TestAddChecksTheNameBeforePrompting(t *testing.T) {
 	defer srv.Close()
 
 	dir := storeWithEndpoint(t, srv.URL)
-	s, _ := store.Open(dir)
-	s.PutModel(store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
-	if err := s.Save(); err != nil {
-		t.Fatal(err)
-	}
+	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
 
-	_, err := runWith(t, "1\n", "--config", dir, "add", "fast", "gw")
+	_, err := runIn(t, "--config", dir, "add", "fast", "gw")
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("err = %v, want an already-exists error", err)
 	}
@@ -300,38 +360,12 @@ func TestAddChecksTheNameBeforePrompting(t *testing.T) {
 	}
 }
 
-func TestSetModelPicksWhenTheValueIsOmitted(t *testing.T) {
-	dir := storeWithEndpoint(t, modelListServer(t).URL)
-	s, _ := store.Open(dir)
-	s.PutModel(store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
-	if err := s.Save(); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := runWith(t, "gpt\n1\n", "--config", dir, "set", "fast", "model"); err != nil {
-		t.Fatal(err)
-	}
-
-	s2, err := store.Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, _ := s2.Model("fast")
-	if m.Model != "openai/gpt-4o" {
-		t.Errorf("model = %q, want openai/gpt-4o", m.Model)
-	}
-}
-
 // Only the model field has a list to pick from; the rest still need a value.
 func TestSetOtherFieldsStillNeedAValue(t *testing.T) {
 	dir := storeWithEndpoint(t, modelListServer(t).URL)
-	s, _ := store.Open(dir)
-	s.PutModel(store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
-	if err := s.Save(); err != nil {
-		t.Fatal(err)
-	}
+	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
 
-	_, err := runWith(t, "", "--config", dir, "set", "fast", "tags")
+	_, err := runIn(t, "--config", dir, "set", "fast", "tags")
 	if err == nil || !strings.Contains(err.Error(), "a value is required") {
 		t.Errorf("err = %v, want a missing-value error", err)
 	}
@@ -341,13 +375,9 @@ func TestSetOtherFieldsStillNeedAValue(t *testing.T) {
 // rather than asking for a value it would then reject.
 func TestSetReportsAnUnknownFieldBeforeAskingForAValue(t *testing.T) {
 	dir := storeWithEndpoint(t, modelListServer(t).URL)
-	s, _ := store.Open(dir)
-	s.PutModel(store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
-	if err := s.Save(); err != nil {
-		t.Fatal(err)
-	}
+	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
 
-	_, err := runWith(t, "", "--config", dir, "set", "fast", "modl")
+	_, err := runIn(t, "--config", dir, "set", "fast", "modl")
 	if err == nil || !strings.Contains(err.Error(), `unknown field "modl"`) {
 		t.Errorf("err = %v, want an unknown-field error", err)
 	}

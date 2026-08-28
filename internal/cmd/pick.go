@@ -1,25 +1,43 @@
 package cmd
 
 import (
-	"bufio"
-	"context"
 	"errors"
 	"fmt"
-	"io"
-	"strconv"
+	"os"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mikiobraun/mf/internal/store"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
-// pickPageSize caps how many candidates are listed at once. A gateway can
-// report several hundred models, and printing all of them scrolls the prompt
-// off the screen.
-const pickPageSize = 20
+// The list grows with the terminal between these bounds. Fewer than five lines
+// is too little to explore with, and more than ten pushes the filter field
+// away from where the eye already is.
+const (
+	pickMinRows = 5
+	pickMaxRows = 10
+	// pickChrome counts the lines the picker draws besides the list: the
+	// header, the key hints, the blank line under them, the blank line above
+	// the filter field, and the field itself.
+	pickChrome = 5
+)
 
-// errNoSelection ends a picker that was cancelled or ran out of input.
+var (
+	headStyle   = lipgloss.NewStyle().Bold(true)
+	hintStyle   = lipgloss.NewStyle().Faint(true)
+	cursorStyle = lipgloss.NewStyle().Bold(true)
+	caretStyle  = lipgloss.NewStyle().Reverse(true)
+)
+
+// errNoSelection ends a picker that was cancelled.
 var errNoSelection = errors.New("no model selected")
+
+// isTerminal reports whether there is a terminal to draw the picker on. It is
+// a variable so that a test can take either branch without one.
+var isTerminal = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
 // pickModelOnEndpoint asks the endpoint what it serves and prompts for one.
 func pickModelOnEndpoint(cmd *cobra.Command, s *store.Store, endpoint string) (string, error) {
@@ -34,129 +52,186 @@ func pickModelOnEndpoint(cmd *cobra.Command, s *store.Store, endpoint string) (s
 	return pickModel(cmd, endpoint, ids)
 }
 
-// pickModel prompts for one of ids and returns it.
+// pickModel runs the interactive list and returns the chosen model ID.
 //
-// The protocol is line-based: a number picks, an empty line gives up, and
-// anything else filters. That needs no raw mode and no terminal, so a piped
-// stdin drives it the same way a person does and the tests can supply a
-// string. The listing goes to stderr, leaving stdout for whatever the command
-// itself prints.
+// It draws on stderr, leaving stdout for whatever the command itself prints.
 func pickModel(cmd *cobra.Command, endpoint string, ids []string) (string, error) {
 	if len(ids) == 0 {
 		return "", fmt.Errorf("%s reports no models to choose from", endpoint)
 	}
-	// A command built by hand rather than executed has no context, and a nil
-	// one cannot be selected on.
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
+	if !isTerminal() {
+		return "", fmt.Errorf("picking a model needs a terminal; pass the model ID as an argument instead")
 	}
-	out := cmd.ErrOrStderr()
-	lines := readLines(cmd.InOrStdin())
 
-	noun := "models"
-	if len(ids) == 1 {
-		noun = "model"
+	opts := []tea.ProgramOption{tea.WithInput(os.Stdin), tea.WithOutput(cmd.ErrOrStderr())}
+	if ctx := cmd.Context(); ctx != nil {
+		// Raw mode delivers ctrl-C as a key, but a SIGINT sent from elsewhere
+		// still arrives as a cancelled context.
+		opts = append(opts, tea.WithContext(ctx))
 	}
-	fmt.Fprintf(out, "%d %s on %s.\nType a filter to narrow, a number to pick, or enter alone to cancel.\n\n",
-		len(ids), noun, endpoint)
-
-	matches := ids
-	listMatches(out, matches)
-	for {
-		fmt.Fprint(out, "\n> ")
-
-		var line string
-		select {
-		case <-ctx.Done():
-			// main turns SIGINT into a cancelled context, which reaches the
-			// picker here rather than through the blocked read.
-			fmt.Fprintln(out)
+	final, err := tea.NewProgram(newPicker(endpoint, ids), opts...).Run()
+	if err != nil {
+		if errors.Is(err, tea.ErrProgramKilled) || errors.Is(err, tea.ErrInterrupted) {
 			return "", errNoSelection
-		case l, more := <-lines:
-			if !more {
-				// End of input, from ctrl-D or an exhausted pipe. The cursor
-				// is still on the prompt line.
-				fmt.Fprintln(out)
-				return "", errNoSelection
+		}
+		return "", fmt.Errorf("running the picker: %w", err)
+	}
+	p, ok := final.(picker)
+	if !ok || p.chosen == "" {
+		return "", errNoSelection
+	}
+	return p.chosen, nil
+}
+
+// picker is the model behind the interactive list. Typing filters the list as
+// each key lands, the arrow keys move a cursor through what survives, and
+// enter takes what the cursor is on.
+type picker struct {
+	endpoint string
+	ids      []string // everything the endpoint reported, never filtered
+	matches  []string // the ids containing filter
+	filter   string
+	cursor   int // index into matches
+	offset   int // index of the first match on screen
+	rows     int // how many matches fit
+	width    int // terminal columns, 0 until the first size message
+	chosen   string
+	done     bool
+}
+
+func newPicker(endpoint string, ids []string) picker {
+	return picker{endpoint: endpoint, ids: ids, matches: ids, rows: pickMinRows}
+}
+
+func (p picker) Init() tea.Cmd { return nil }
+
+func (p picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		p.width = msg.Width
+		p.rows = viewportRows(msg.Height)
+		p.scroll()
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc:
+			p.done = true
+			return p, tea.Quit
+		case tea.KeyEnter:
+			if len(p.matches) > 0 {
+				p.chosen = p.matches[p.cursor]
 			}
-			line = l
+			p.done = true
+			return p, tea.Quit
+		case tea.KeyUp, tea.KeyCtrlP:
+			p.move(-1)
+		case tea.KeyDown, tea.KeyCtrlN:
+			p.move(1)
+		case tea.KeyBackspace:
+			if r := []rune(p.filter); len(r) > 0 {
+				p.setFilter(string(r[:len(r)-1]))
+			}
+		case tea.KeySpace:
+			p.setFilter(p.filter + " ")
+		case tea.KeyRunes:
+			p.setFilter(p.filter + string(msg.Runes))
 		}
+	}
+	return p, nil
+}
 
-		text := strings.TrimSpace(line)
-		if text == "" {
-			return "", errNoSelection
-		}
-		switch n, numeric := pickNumber(text); {
-		case numeric && (n < 1 || n > len(matches)):
-			fmt.Fprintf(out, "pick a number between 1 and %d, or type a filter\n", len(matches))
-		case numeric:
-			return matches[n-1], nil
+func (p picker) View() string {
+	if p.done {
+		// Drawing nothing makes bubbletea erase the picker, so only the
+		// command's own output is left behind.
+		return ""
+	}
+
+	var b strings.Builder
+	head := fmt.Sprintf("%d models on %s", len(p.ids), p.endpoint)
+	if p.filter != "" {
+		head = fmt.Sprintf("%d of %d models on %s", len(p.matches), len(p.ids), p.endpoint)
+	}
+	b.WriteString(headStyle.Render(head))
+	b.WriteByte('\n')
+	b.WriteString(hintStyle.Render("↑↓ move · enter selects · esc cancels · type to filter"))
+	b.WriteString("\n\n")
+
+	// Every row is written, empty ones included, so the filter field holds
+	// still as the match count changes under it.
+	for i := 0; i < p.rows; i++ {
+		n := p.offset + i
+		switch {
+		case len(p.matches) == 0:
+			if i == 0 {
+				b.WriteString(hintStyle.Render("  nothing matches"))
+			}
+		case n >= len(p.matches):
+		case n == p.cursor:
+			b.WriteString(cursorStyle.Render("> " + fit(p.matches[n], p.width-2)))
 		default:
-			// Filters apply to the full list, so typing a new one replaces
-			// the old rather than narrowing what is already narrowed.
-			found := filterIDs(ids, text)
-			if len(found) == 0 {
-				fmt.Fprintf(out, "nothing matches %q\n", text)
-				continue
-			}
-			matches = found
-			listMatches(out, matches)
+			b.WriteString("  " + fit(p.matches[n], p.width-2))
 		}
+		b.WriteByte('\n')
 	}
+
+	b.WriteByte('\n')
+	b.WriteString(hintStyle.Render(">") + " " + p.filter + caretStyle.Render(" "))
+	return b.String()
 }
 
-// readLines pumps input into a channel, so that the picker can wait on the
-// context as well as on the reader. A read blocks until the user types, and a
-// select cannot watch a blocking read directly.
-//
-// The goroutine outlives a picker that returned early, parked on a read that
-// will never complete. It holds nothing but stdin and the process exits moments
-// later, so there is nothing to unwind.
-func readLines(r io.Reader) <-chan string {
-	ch := make(chan string)
-	go func() {
-		defer close(ch)
-		br := bufio.NewReader(r)
-		for {
-			line, err := br.ReadString('\n')
-			if line != "" {
-				ch <- line
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	return ch
+// setFilter re-runs the filter over the whole list and starts from the top,
+// since a cursor position means nothing against a new set of matches.
+func (p *picker) setFilter(f string) {
+	p.filter = f
+	p.matches = filterIDs(p.ids, f)
+	p.cursor = 0
+	p.offset = 0
 }
 
-// pickNumber reports whether text is a plain positive number, so that a filter
-// like "4o" is not mistaken for a selection.
-func pickNumber(text string) (int, bool) {
-	for _, r := range text {
-		if r < '0' || r > '9' {
-			return 0, false
-		}
+// move walks the cursor, stopping at either end rather than wrapping.
+func (p *picker) move(d int) {
+	if len(p.matches) == 0 {
+		return
 	}
-	n, err := strconv.Atoi(text)
-	return n, err == nil
+	p.cursor = clamp(p.cursor+d, 0, len(p.matches)-1)
+	p.scroll()
 }
 
-// listMatches prints one page of candidates, numbered from 1. Numbering runs
-// over every match, so a number past the page is still selectable.
-func listMatches(w io.Writer, matches []string) {
-	shown := matches
-	if len(shown) > pickPageSize {
-		shown = shown[:pickPageSize]
+// scroll shifts the window the least distance that brings the cursor back into
+// view, and keeps it from running past the end of a short list.
+func (p *picker) scroll() {
+	if p.cursor < p.offset {
+		p.offset = p.cursor
 	}
-	width := len(strconv.Itoa(len(matches)))
-	for i, id := range shown {
-		fmt.Fprintf(w, "  %*d  %s\n", width, i+1, id)
+	if p.cursor >= p.offset+p.rows {
+		p.offset = p.cursor - p.rows + 1
 	}
-	if rest := len(matches) - len(shown); rest > 0 {
-		fmt.Fprintf(w, "  (%d more; type a filter to narrow)\n", rest)
+	p.offset = clamp(p.offset, 0, max(0, len(p.matches)-p.rows))
+}
+
+// viewportRows fits the list to the terminal, within the bounds.
+func viewportRows(termHeight int) int {
+	return clamp(termHeight-pickChrome, pickMinRows, pickMaxRows)
+}
+
+func clamp(v, lo, hi int) int {
+	return min(max(v, lo), hi)
+}
+
+// fit shortens s to w columns, marking the cut. A width of zero means the
+// terminal size is not known yet, so nothing is cut.
+func fit(s string, w int) string {
+	if w <= 0 {
+		return s
 	}
+	r := []rune(s)
+	if len(r) <= w {
+		return s
+	}
+	if w == 1 {
+		return "…"
+	}
+	return string(r[:w-1]) + "…"
 }
 
 // filterIDs keeps the ids containing q, case-insensitively.

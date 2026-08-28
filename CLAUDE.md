@@ -9,9 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     go test ./internal/store -run TestRoundTrip -v    # one test
     go vet ./...
 
-The suite is hermetic. The store and resolver run against `t.TempDir()`, and the
-provider runs against `httptest` servers, so no test needs a network or a key.
-Keep it that way: a test that reaches a real endpoint cannot run in CI.
+The suite is hermetic. The store and resolver run against `t.TempDir()`, the
+provider runs against `httptest` servers, and the picker is driven as a
+bubbletea model rather than as a running program, so no test needs a network, a
+key, or a terminal. Keep it that way: a test that reaches a real endpoint
+cannot run in CI, and one that wants a pty cannot either.
 
 To exercise the binary by hand without touching your real registry, point
 `MF_CONFIG_DIR` at a scratch directory:
@@ -41,12 +43,19 @@ Four packages, layered, with dependencies pointing one way only:
   returns a clear error when a client is built. Adding a dialect means
   implementing `Client` and adding a case to that switch.
 - **`cmd`** is the cobra tree. Each command is a `newXCmd()` constructor
-  registered in `NewRootCmd`. `pick.go` holds the model picker: it is
-  line-based rather than raw-mode, so it needs no terminal and a test drives it
-  by handing the command a string as stdin. It reads through a goroutine
-  feeding a channel so the loop can select on `cmd.Context()` as well — `main`
-  installs `signal.NotifyContext`, which takes SIGINT off Go's default kill
-  path, so without that select ctrl-C would not end the prompt.
+  registered in `NewRootCmd`. `pick.go` holds the model picker, a bubbletea
+  model that draws on stderr. It needs a terminal and returns an error without
+  one, so the tests drive the model directly with `tea.KeyMsg` values instead
+  of running a program; `isTerminal` is a package variable so either branch can
+  be taken under test.
+
+Importing bubbletea has a cost that reaches every command, not only the
+picker. Its package `init()` calls `lipgloss.HasDarkBackground()`, which sends
+`OSC 11` and then `CSI 6n` to the terminal and waits. A terminal that answers
+either one costs nothing measurable, and `TERM` starting with `screen`, `tmux`
+or `dumb` skips the query outright, but a terminal answering neither costs
+`termenv.OSCTimeout`, five seconds, on `mf list` as much as on `mf add`.
+Measured at 0.00s against an answering pty and 5.01s against a silent one.
 
 ## Invariants
 
@@ -83,8 +92,8 @@ that walk the whole command tree:
 - `argHelp` produces the count-mismatch error, which names each argument and
   shows a worked command line rather than printing counts.
 - An omitted optional positional is the trigger for interactive input, not a
-  flag. `mf add <name> <endpoint>` and `mf set <name> model` drop into
-  `pickModel` rather than taking an `--interactive`.
+  flag. `mf add <name> <endpoint>` and `mf set <name> model` open the picker
+  rather than taking an `--interactive`.
 
 ## Output conventions
 

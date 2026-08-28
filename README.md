@@ -115,43 +115,53 @@ Three forms, tried in this order:
 
 ### Picking a model ID
 
-Leave the model ID out and `mf` asks the endpoint what it serves, then prompts.
-This works on `mf add <name> <endpoint>` and on `mf set <name> model`.
+Leave the model ID out and `mf` asks the endpoint what it serves, then opens a
+picker. This works on `mf add <name> <endpoint>` and on `mf set <name> model`.
 
-Type a filter to narrow the list, or a number to pick from it. A filter always
-applies to the whole list, so typing a second one replaces the first rather
-than narrowing further. Long lists show the first 20 entries, and the numbering
-covers every match, so a number past the page still works.
+The list filters as you type, matching case-insensitively anywhere in the ID.
+`↑` and `↓` move the `>` cursor and scroll the window, enter takes whatever the
+cursor is on, and backspace deletes the last character of the filter. The
+window holds between five and ten entries, following the terminal height.
 
 ```
 $ mf add fast bifrost
-42 models on bifrost.
-Type a filter to narrow, a number to pick, or enter alone to cancel.
+43 models on bifrost
+↑↓ move · enter selects · esc cancels · type to filter
 
-   1  anthropic/claude-opus-4
-   2  anthropic/claude-sonnet-4
-  ...
-  20  openai/gpt-4o
-  (22 more; type a filter to narrow)
+> anthropic/claude-opus-4
+  anthropic/claude-sonnet-4
+  deepseek/deepseek-v3
+  gemini/gemini-2.0-flash
+  gemini/gemini-2.1-flash
 
-> gemini
-  1  gemini/gemini-2.5-flash
-  2  gemini/gemini-2.5-pro
-  3  gemini/gemini-2.0-flash
-
-> 1
-added fast -> gemini/gemini-2.5-flash on bifrost
+>
 ```
 
-Three things leave without picking: an empty line, ctrl-C, and ctrl-D. All
-three print `mf: no model selected` and exit non-zero, and nothing is written.
-An empty line is the documented way out because it cannot be confused with a
-filter, an empty filter being one that matches everything.
+After typing `gem` and pressing `↓` once:
 
-The prompt reads lines rather than keystrokes, so it needs no terminal and a
-pipe drives it the same way a person does. Input that runs out before a choice
-counts as a cancel, so a scripted `mf add` that forgot its model ID fails
-instead of picking something.
+```
+5 of 43 models on bifrost
+↑↓ move · enter selects · esc cancels · type to filter
+
+  gemini/gemini-2.0-flash
+> gemini/gemini-2.1-flash
+  gemini/gemini-2.2-flash
+  gemini/gemini-2.3-flash
+  gemini/gemini-2.4-flash
+
+> gem
+```
+
+Escape and ctrl-C leave without picking. Both print `mf: no model selected`
+and exit non-zero, and nothing is written.
+
+The picker draws on stderr, so a piped stdout stays clean. It needs a terminal
+and says so rather than half-drawing into a pipe:
+
+```
+$ mf add fast bifrost < /dev/null
+mf: picking a model needs a terminal; pass the model ID as an argument instead
+```
 
 ### What `url` means
 
