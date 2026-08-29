@@ -32,11 +32,6 @@ something.
 name = 'bifrost'                        # referenced by [[model]].endpoint
 url  = 'https://gw.example.com/v1'  # API base, including any version prefix
 
-[[endpoint]]
-name = 'anthropic'
-url  = 'https://api.anthropic.com'
-api  = 'anthropic'                      # omitted entirely when 'openai'
-
 [[model]]
 name     = 'fast'                       # the alias you address
 endpoint = 'bifrost'                    # must name an [[endpoint]]
@@ -48,14 +43,13 @@ tags     = ['coding', 'cheap']          # omitted entirely when empty
 |---|---|---|---|
 | `[[endpoint]]` | `name` | yes | no slashes; a slash would be ambiguous with `endpoint/model` addressing |
 | | `url` | yes | see [What `url` means](#what-url-means) |
-| | `api` | no | `openai` (default) or `anthropic` |
 | `[[model]]` | `name` | yes | the alias; wins over an `endpoint/model` reading of the same string |
 | | `endpoint` | yes | an `[[endpoint]]` `name` |
 | | `model` | yes | the provider's model ID, which may itself contain slashes |
 | | `tags` | no | addressable as `@tag`, filterable with `--tags` |
 
-An absent optional key means the default, never a broken file. `api` is written
-only when it is not `openai`, and `tags` only when the entry has any.
+An absent optional key means the default, never a broken file. `tags` is
+written only when the entry has any.
 
 ### `models.secrets`
 
@@ -101,12 +95,12 @@ Three forms, tried in this order:
 | Command | Purpose |
 |---|---|
 | `mf list [--tags a,b]` | list configured models (`--tags` requires *all* listed tags) |
-| `mf endpoint add <name> <url> [--key K] [--api openai\|anthropic]` | add an endpoint; prompts for the key |
+| `mf endpoint add <name> <url> [--key K]` | add an endpoint; prompts for the key |
 | `mf endpoint remove <name> [-f]` | remove an endpoint, its models, and its secrets |
 | `mf endpoint list` | list endpoints, model counts, and whether a key is set |
 | `mf add <name> <endpoint> [<model>] [--tags a,b] [--key K]` | add a model entry; omit the ID to [pick one](#picking-a-model-id) |
 | `mf remove <name>` | remove a model entry, leaving the endpoint |
-| `mf get <name> <field>` | print `endpoint`, `url`, `key`, `model`, `tags`, or `api` |
+| `mf get <name> <field>` | print `endpoint`, `url`, `key`, `model`, or `tags` |
 | `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, or `key` |
 | `mf models <endpoint>` | model IDs the endpoint reports |
 | `mf sync <endpoint> [--tags a,b]` | upsert every reported model into `models.toml` |
@@ -202,7 +196,7 @@ A value that is always required is a positional argument. Flags are reserved
 for values you can omit:
 
 ```
-mf endpoint add <name> <url> [--key K] [--api openai|anthropic]
+mf endpoint add <name> <url> [--key K]
 mf add <name> <endpoint> [<model>] [--tags a,b] [--key K]
 ```
 
@@ -239,16 +233,9 @@ example:
 
 ## Status
 
-Implemented: the full store, all three addressing forms, the model picker, and
-the network commands (`models`, `sync`, `check`, `ask`) against
-**OpenAI-compatible** endpoints — `GET {url}/models`,
+The network commands (`models`, `sync`, `check`, `ask`) speak to
+**OpenAI-compatible** endpoints: `GET {url}/models`,
 `POST {url}/chat/completions`, bearer auth.
-
-Not yet implemented:
-
-- the `anthropic` wire format — the field parses and round-trips, but building
-  a client for it returns a clear error
-- `mf import` / `mf export` / `mf configure`
 
 ## Development
 

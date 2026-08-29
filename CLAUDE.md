@@ -105,4 +105,5 @@ lines and only needs the non-zero exit (`check` does this).
 
 ## Not yet implemented
 
-The `anthropic` wire format, and `mf import` / `mf export` / `mf configure`.
+`TODO.md` is the one list of what is missing and what is planned. Put new
+entries there.
