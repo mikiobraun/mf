@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 )
 
 func TestSplitTags(t *testing.T) {
@@ -43,7 +43,7 @@ func TestMergeTags(t *testing.T) {
 }
 
 func TestMatchesAll(t *testing.T) {
-	m := store.Model{Name: "x", Tags: []string{"coding", "cheap"}}
+	m := registry.Model{Name: "x", Tags: []string{"coding", "cheap"}}
 	if !matchesAll(m, nil) {
 		t.Error("no filter should match everything")
 	}

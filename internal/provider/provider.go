@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 )
 
 // Client is the wire-format-specific surface mf needs from an endpoint.
@@ -20,16 +20,16 @@ type Client interface {
 }
 
 // New returns a client for the endpoint's dialect.
-func New(ep store.Endpoint, key string) (Client, error) {
+func New(ep registry.Endpoint, key string) (Client, error) {
 	switch ep.Dialect() {
-	case store.APIOpenAI:
+	case registry.APIOpenAI:
 		return &openAIClient{base: BaseURL(ep.URL), key: key, http: httpClient()}, nil
-	case store.APIAnthropic:
+	case registry.APIAnthropic:
 		return nil, fmt.Errorf("endpoint %q uses the %q API, which is not implemented yet; only %q endpoints are supported",
-			ep.Name, store.APIAnthropic, store.APIOpenAI)
+			ep.Name, registry.APIAnthropic, registry.APIOpenAI)
 	default:
 		return nil, fmt.Errorf("endpoint %q has unknown api %q (expected %q or %q)",
-			ep.Name, ep.API, store.APIOpenAI, store.APIAnthropic)
+			ep.Name, ep.API, registry.APIOpenAI, registry.APIAnthropic)
 	}
 }
 

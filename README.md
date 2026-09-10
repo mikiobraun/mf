@@ -231,6 +231,27 @@ example:
 
 `--config <dir>` overrides both.
 
+## Reading the registry from Go
+
+The point of a shared registry is that other tools read it. Import
+`github.com/mikiobraun/mf/registry` rather than parsing the files yourself, and
+you get the addressing forms and the key precedence for free:
+
+```go
+import "github.com/mikiobraun/mf/registry"
+
+dir, err := registry.DefaultDir()          // MF_CONFIG_DIR, XDG, ~/.config/mf
+s, err := registry.Open(dir)               // missing files yield an empty store
+ref, err := registry.Resolve(s, "fast")    // alias, endpoint/model, or @tag
+key, ok := ref.Key(s)                      // env override, then model, then endpoint
+
+// ref.Endpoint.URL is the API base, ref.ModelID the provider's model ID.
+```
+
+`registry` is the only package outside `internal/`; everything else is mf's own
+business. It does no network I/O, so a client that only wants "which URL, which
+key, which model ID" pays for a TOML parser and nothing else.
+
 ## Status
 
 The network commands (`models`, `sync`, `check`, `ask`) speak to

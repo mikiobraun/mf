@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 )
 
 var threeIDs = []string{"anthropic/claude-opus-4", "gemini/gemini-2.5-flash", "openai/gpt-4o"}
@@ -256,11 +256,11 @@ func TestFilterIDs(t *testing.T) {
 func storeWithEndpoint(t *testing.T, url string) string {
 	t.Helper()
 	dir := t.TempDir()
-	s, err := store.Open(dir)
+	s, err := registry.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.PutEndpoint(store.Endpoint{Name: "gw", URL: url})
+	s.PutEndpoint(registry.Endpoint{Name: "gw", URL: url})
 	if err := s.Save(); err != nil {
 		t.Fatal(err)
 	}
@@ -278,9 +278,9 @@ func modelListServer(t *testing.T) *httptest.Server {
 }
 
 // withEntry adds a model entry to the store in dir.
-func withEntry(t *testing.T, dir string, m store.Model) {
+func withEntry(t *testing.T, dir string, m registry.Model) {
 	t.Helper()
-	s, err := store.Open(dir)
+	s, err := registry.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestAddRefusesToPickWithoutATerminal(t *testing.T) {
 
 func TestSetModelRefusesToPickWithoutATerminal(t *testing.T) {
 	dir := storeWithEndpoint(t, modelListServer(t).URL)
-	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
+	withEntry(t, dir, registry.Model{Name: "fast", Endpoint: "gw", Model: "old"})
 
 	_, err := runIn(t, "--config", dir, "set", "fast", "model")
 	if err == nil || !strings.Contains(err.Error(), "needs a terminal") {
@@ -349,7 +349,7 @@ func TestAddChecksTheNameBeforePrompting(t *testing.T) {
 	defer srv.Close()
 
 	dir := storeWithEndpoint(t, srv.URL)
-	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
+	withEntry(t, dir, registry.Model{Name: "fast", Endpoint: "gw", Model: "old"})
 
 	_, err := runIn(t, "--config", dir, "add", "fast", "gw")
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
@@ -363,7 +363,7 @@ func TestAddChecksTheNameBeforePrompting(t *testing.T) {
 // Only the model field has a list to pick from; the rest still need a value.
 func TestSetOtherFieldsStillNeedAValue(t *testing.T) {
 	dir := storeWithEndpoint(t, modelListServer(t).URL)
-	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
+	withEntry(t, dir, registry.Model{Name: "fast", Endpoint: "gw", Model: "old"})
 
 	_, err := runIn(t, "--config", dir, "set", "fast", "tags")
 	if err == nil || !strings.Contains(err.Error(), "a value is required") {
@@ -375,7 +375,7 @@ func TestSetOtherFieldsStillNeedAValue(t *testing.T) {
 // rather than asking for a value it would then reject.
 func TestSetReportsAnUnknownFieldBeforeAskingForAValue(t *testing.T) {
 	dir := storeWithEndpoint(t, modelListServer(t).URL)
-	withEntry(t, dir, store.Model{Name: "fast", Endpoint: "gw", Model: "old"})
+	withEntry(t, dir, registry.Model{Name: "fast", Endpoint: "gw", Model: "old"})
 
 	_, err := runIn(t, "--config", dir, "set", "fast", "modl")
 	if err == nil || !strings.Contains(err.Error(), `unknown field "modl"`) {

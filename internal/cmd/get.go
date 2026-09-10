@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mikiobraun/mf/internal/resolve"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -31,7 +31,7 @@ func newGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ref, err := resolve.Resolve(s, addr)
+			ref, err := registry.Resolve(s, addr)
 			if err != nil {
 				return err
 			}
@@ -52,7 +52,7 @@ func newGetCmd() *cobra.Command {
 				key, ok := ref.Key(s)
 				if !ok {
 					return fmt.Errorf("no key configured for %s (set one with `mf set %s key <value>` or $%s)",
-						addr, ref.Name, resolve.KeyEnvVar(ref.Endpoint.Name))
+						addr, ref.Name, registry.KeyEnvVar(ref.Endpoint.Name))
 				}
 				fmt.Fprintln(cmd.OutOrStdout(), key)
 			default:

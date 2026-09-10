@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
     go build -o mf .                                  # build the CLI
     go test ./...                                     # full suite
-    go test ./internal/store -run TestRoundTrip -v    # one test
+    go test ./registry -run TestRoundTrip -v          # one test
     go vet ./...
 
 The suite is hermetic. The store and resolver run against `t.TempDir()`, the
@@ -22,12 +22,18 @@ To exercise the binary by hand without touching your real registry, point
 
 ## Architecture
 
-Four packages, layered, with dependencies pointing one way only:
+Three packages, layered, with dependencies pointing one way only:
 
-    cmd  ──▶  resolve  ──▶  store      (registry lookups; no network)
-     └───▶  provider  ──▶  store      (HTTP; no registry mutation)
+    internal/cmd  ──▶  registry              (files and lookups; no network)
+          └─────▶  internal/provider  ──▶  registry   (HTTP; no registry mutation)
 
-- **`store`** owns the two files in the config dir: `models.toml` (endpoints and
+- **`registry`** is the only package outside `internal/`, because other tools
+  import it to read the registry instead of parsing the files themselves.
+  Treat its exported surface as an API with users: `Open`, `Store`, `Config`,
+  `Endpoint`, `Model`, `Secret`, `Resolve`, `Ref` and `Ref.Key`. `aishell` is
+  the first consumer.
+
+  `store.go` owns the two files in the config dir: `models.toml` (endpoints and
   model entries, mode 0644) and `models.secrets` (API keys, mode 0600). Opening
   a missing dir or missing file yields an empty store rather than an error, so
   first-run commands work. Writes go to a temp file in the same directory and
@@ -35,8 +41,11 @@ Four packages, layered, with dependencies pointing one way only:
   `Save()` and `SaveSecrets()` are separate — a command that changes both must
   call both, and `Save()` re-marshals from memory, discarding hand-written
   comments and formatting.
-- **`resolve`** turns a user-supplied address into a `Ref` (endpoint, model ID,
-  key). It is pure lookup over a loaded store.
+
+  `resolve.go` turns a user-supplied address into a `Ref` (endpoint, model ID,
+  key). It is pure lookup over a loaded store. It lives in the same package as
+  the store because it is meaningless without one, and splitting them only made
+  every caller import two packages.
 - **`provider`** is the HTTP layer behind the `Client` interface
   (`ListModels`, `Chat`). `New` switches on the endpoint's dialect. Only the
   OpenAI wire format is implemented; `anthropic` parses and round-trips but
@@ -69,7 +78,7 @@ non-JSON 200 is reported as a probable base URL problem, naming the URL that
 was actually requested. Guarded by `TestBaseURLIsVerbatim` and
 `TestNonV1BasePathIsHonoured`.
 
-**Addressing precedence** in `resolve.Resolve`: an alias matching a `[[model]]`
+**Addressing precedence** in `registry.Resolve`: an alias matching a `[[model]]`
 name wins first, then `endpoint/model` split on the **first** slash (so model
 IDs may contain slashes), then `@tag`, which takes the first match and reports
 the rest in `Ref.TagMatches` for the caller to note on stderr.

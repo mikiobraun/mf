@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +61,7 @@ func newListCmd() *cobra.Command {
 }
 
 // matchesAll reports whether m carries every requested tag.
-func matchesAll(m store.Model, want []string) bool {
+func matchesAll(m registry.Model, want []string) bool {
 	for _, t := range want {
 		if !m.HasTag(t) {
 			return false

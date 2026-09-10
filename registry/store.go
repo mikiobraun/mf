@@ -1,6 +1,11 @@
-// Package store holds the on-disk model registry: models.toml (shareable
-// definitions) and models.secrets (API keys, never shared).
-package store
+// Package registry is the on-disk model registry and the lookups over it:
+// models.toml (shareable definitions), models.secrets (API keys, never
+// shared), and the addressing rules that turn a user-supplied model address
+// into an endpoint, a model ID and a key.
+//
+// It is the package other tools import to read the registry, so that each one
+// does not parse the files itself.
+package registry
 
 import (
 	"errors"

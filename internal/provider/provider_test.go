@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 )
 
 // BaseURL must pass the configured URL through untouched apart from a
@@ -37,7 +37,7 @@ func TestNonV1BasePathIsHonoured(t *testing.T) {
 		w.Write([]byte(`{"data":[{"id":"m"}]}`))
 	}))
 	defer srv.Close()
-	c, err := New(store.Endpoint{Name: "gw", URL: srv.URL + "/openai/v2"}, "k")
+	c, err := New(registry.Endpoint{Name: "gw", URL: srv.URL + "/openai/v2"}, "k")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,14 +66,14 @@ func TestNotFoundMentionsTheBaseURL(t *testing.T) {
 }
 
 func TestAnthropicDialectIsNotImplemented(t *testing.T) {
-	_, err := New(store.Endpoint{Name: "a", URL: "https://x", API: store.APIAnthropic}, "k")
+	_, err := New(registry.Endpoint{Name: "a", URL: "https://x", API: registry.APIAnthropic}, "k")
 	if err == nil {
 		t.Fatal("expected an error for the anthropic dialect")
 	}
 }
 
 func TestUnknownDialect(t *testing.T) {
-	if _, err := New(store.Endpoint{Name: "a", URL: "https://x", API: "gemini"}, "k"); err == nil {
+	if _, err := New(registry.Endpoint{Name: "a", URL: "https://x", API: "gemini"}, "k"); err == nil {
 		t.Fatal("expected an error for an unknown dialect")
 	}
 }
@@ -82,7 +82,7 @@ func newTestClient(t *testing.T, h http.HandlerFunc) Client {
 	t.Helper()
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	c, err := New(store.Endpoint{Name: "test", URL: srv.URL}, "test-key")
+	c, err := New(registry.Endpoint{Name: "test", URL: srv.URL}, "test-key")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestNoKeySendsNoAuthHeader(t *testing.T) {
 		w.Write([]byte(`{"data":[]}`))
 	}))
 	defer srv.Close()
-	c, err := New(store.Endpoint{Name: "local", URL: srv.URL}, "")
+	c, err := New(registry.Endpoint{Name: "local", URL: srv.URL}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

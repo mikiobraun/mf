@@ -33,16 +33,6 @@ Preconfigured OpenAI-compatible endpoints, so that `mf endpoint add openrouter`
 fills in the URL by itself: DigitalOcean, OpenRouter, and whichever others are
 worth shipping a default for.
 
-## A client library for `models.toml`
-
-A package other tools import to read the registry, instead of each one parsing
-the file itself.
-
-Open: whether this earns its keep. `models.toml` is a small TOML document with
-a documented shape, and a client that already has a TOML parser may be better
-served reading it directly than taking on a dependency. Worth deciding before
-building.
-
 ## `mf import` / `mf export` / `mf configure`
 
 What each of these should do is still open.

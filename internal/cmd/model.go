@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +50,7 @@ func newAddCmd() *cobra.Command {
 				}
 			}
 
-			s.PutModel(store.Model{
+			s.PutModel(registry.Model{
 				Name:     name,
 				Endpoint: endpoint,
 				Model:    modelID,
