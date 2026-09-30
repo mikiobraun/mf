@@ -77,17 +77,28 @@ func newExecCmd() *cobra.Command {
 // value for them is dropped first, and the key variable stays unset when no
 // key is configured.
 func execEnv(environ []string, prefix, url, model, key string, hasKey bool) []string {
-	ours := map[string]bool{prefix + "BASE_URL": true, prefix + "MODEL": true, prefix + "API_KEY": true}
-	out := make([]string, 0, len(environ)+len(ours))
+	env := withoutEnv(environ, prefix+"API_KEY")
+	env = withEnv(env, prefix+"BASE_URL", url)
+	env = withEnv(env, prefix+"MODEL", model)
+	if hasKey {
+		env = withEnv(env, prefix+"API_KEY", key)
+	}
+	return env
+}
+
+// withEnv returns environ with name set to value, replacing any inherited
+// value rather than adding a second entry.
+func withEnv(environ []string, name, value string) []string {
+	return append(withoutEnv(environ, name), name+"="+value)
+}
+
+// withoutEnv returns a copy of environ with every entry for name removed.
+func withoutEnv(environ []string, name string) []string {
+	out := make([]string, 0, len(environ)+1)
 	for _, kv := range environ {
-		name, _, _ := strings.Cut(kv, "=")
-		if !ours[name] {
+		if n, _, _ := strings.Cut(kv, "="); n != name {
 			out = append(out, kv)
 		}
-	}
-	out = append(out, prefix+"BASE_URL="+url, prefix+"MODEL="+model)
-	if hasKey {
-		out = append(out, prefix+"API_KEY="+key)
 	}
 	return out
 }

@@ -19,6 +19,9 @@ type Ref struct {
 	Endpoint Endpoint
 	// Tags are the entry's tags; nil for direct endpoint/model references.
 	Tags []string
+	// Context and Output are the entry's token limits; zero when unset or
+	// for direct endpoint/model references.
+	Context, Output int
 	// Entry reports whether a [[model]] entry backs this reference. Only
 	// entries can carry model-scoped secrets.
 	Entry bool
@@ -91,6 +94,8 @@ func fromEntry(s *Store, m Model) (*Ref, error) {
 		ModelID:  m.Model,
 		Endpoint: ep,
 		Tags:     m.Tags,
+		Context:  m.Context,
+		Output:   m.Output,
 		Entry:    true,
 	}, nil
 }

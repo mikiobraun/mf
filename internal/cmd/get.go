@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/mikiobraun/mf/registry"
@@ -11,7 +12,7 @@ import (
 )
 
 // getFields are the fields `mf get` can print, in help order.
-var getFields = []string{"endpoint", "url", "api", "key", "model", "tags"}
+var getFields = []string{"endpoint", "url", "api", "key", "model", "tags", "context", "output"}
 
 func newGetCmd() *cobra.Command {
 	var asJSON bool
@@ -64,6 +65,10 @@ func newGetCmd() *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), strings.Join(ref.Tags, ","))
 			case "api":
 				fmt.Fprintln(cmd.OutOrStdout(), ref.Endpoint.Dialect())
+			case "context":
+				fmt.Fprintln(cmd.OutOrStdout(), limitString(ref.Context))
+			case "output":
+				fmt.Fprintln(cmd.OutOrStdout(), limitString(ref.Output))
 			case "key":
 				key, ok := ref.Key(s)
 				if !ok {
@@ -91,7 +96,18 @@ type entryJSON struct {
 	API      string   `json:"api"`
 	Model    string   `json:"model"`
 	Tags     []string `json:"tags"`
+	Context  int      `json:"context,omitempty"`
+	Output   int      `json:"output,omitempty"`
 	HasKey   bool     `json:"has_key"`
+}
+
+// limitString prints an unset limit as an empty line, the way get prints an
+// entry without tags.
+func limitString(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
 }
 
 func newEntryJSON(s *registry.Store, ref *registry.Ref) entryJSON {
@@ -107,6 +123,8 @@ func newEntryJSON(s *registry.Store, ref *registry.Ref) entryJSON {
 		API:      ref.Endpoint.Dialect(),
 		Model:    ref.ModelID,
 		Tags:     tags,
+		Context:  ref.Context,
+		Output:   ref.Output,
 		HasKey:   hasKey,
 	}
 }

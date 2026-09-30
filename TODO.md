@@ -2,21 +2,28 @@
 
 Where `mf` might go next. These are notes, not designs.
 
-## `mf run <tool> <models...>`
+## More `mf run` clients, and `mf configure`
 
-Launch a client — Claude Code, pi, Cursor — against specific entries from the
-registry, either by setting the environment variables it reads or by writing
-the config file it expects.
+`mf run opencode` exists. Each client is a subcommand with the same shape:
+the main model is a positional, further models to offer are more positionals,
+and the client's own optional roles are flags (`--small` for opencode; aider
+would have `--weak` and `--editor`). Only the named models are configured,
+never the whole registry.
 
-`OPENAI_BASE_URL` and its neighbours are the lever most tools already
-understand, and setting them by hand is what a bifrost, litellm, or OpenRouter
-user does today. `mf run` would set them from a registry entry instead.
+Next clients: aider, Claude Code, pi. Each is Go code for now. A template or
+data format for client configs should be extracted once a few exist and the
+common shape is visible, not designed up front.
 
-The per-tool part should be data rather than code: a table describing what each
-client wants, so that supporting a new one is an entry rather than a commit.
+`mf configure <client> <models...>` writes the same config to a file instead
+of passing it at launch. Open questions:
 
-Open: what those configs actually look like. This needs a survey of the clients
-worth supporting before the shape of the data can be decided.
+- keys: a written file cannot rely on mf setting the environment, so either
+  the key goes into the file, the user sets `MF_KEY_*` themselves, or it goes
+  into the client's own secret store (opencode's `auth.json`)
+- which file: merging into the user's global config means JSONC parsing and
+  losing their comments; an mf-owned file needs the client to be pointed at it
+- re-running must replace what mf wrote before without touching the user's
+  own providers
 
 ## More endpoint types
 
@@ -33,6 +40,6 @@ Preconfigured OpenAI-compatible endpoints, so that `mf endpoint add openrouter`
 fills in the URL by itself: DigitalOcean, OpenRouter, and whichever others are
 worth shipping a default for.
 
-## `mf import` / `mf export` / `mf configure`
+## `mf import` / `mf export`
 
 What each of these should do is still open.

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mikiobraun/mf/registry"
@@ -105,14 +106,16 @@ func newRemoveCmd() *cobra.Command {
 }
 
 // setFields are the fields `mf set` accepts, in help order.
-var setFields = []string{"endpoint", "model", "tags", "key"}
+var setFields = []string{"endpoint", "model", "tags", "key", "context", "output"}
 
 func newSetCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "set <name> <field> [<value>]",
 		Short: "Update a field on an existing model entry",
 		Long: "Update a field on an existing model entry.\n\nFields: " + strings.Join(setFields, ", ") +
-			"\n\nOmitting the value for the model field picks one from the endpoint's\nown list.",
+			"\n\nOmitting the value for the model field picks one from the endpoint's\nown list." +
+			"\n\ncontext and output are token limits for the context window and a single\n" +
+			"reply, as this endpoint serves the model. 0 removes a limit.",
 		Args: argHelp{
 			min: 2, max: 3,
 			args: [][2]string{
@@ -164,6 +167,16 @@ func newSetCmd() *cobra.Command {
 				m.Model = value
 			case "tags":
 				m.Tags = splitTags(value)
+			case "context", "output":
+				n, err := strconv.Atoi(value)
+				if err != nil || n < 0 {
+					return fmt.Errorf("%s must be a token count, 0 or more; got %q", field, value)
+				}
+				if field == "context" {
+					m.Context = n
+				} else {
+					m.Output = n
+				}
 			case "key":
 				s.PutSecret(m.Endpoint, m.Name, value)
 				if err := s.SaveSecrets(); err != nil {

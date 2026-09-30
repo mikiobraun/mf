@@ -37,6 +37,8 @@ name     = 'fast'                       # the alias you address
 endpoint = 'bifrost'                    # must name an [[endpoint]]
 model    = 'gemini/gemini-2.5-flash'    # the provider's own model ID
 tags     = ['coding', 'cheap']          # omitted entirely when empty
+context  = 1048576                      # token limits, as this endpoint serves the model
+output   = 65536
 ```
 
 | Table | Key | Required | Notes |
@@ -47,9 +49,16 @@ tags     = ['coding', 'cheap']          # omitted entirely when empty
 | | `endpoint` | yes | an `[[endpoint]]` `name` |
 | | `model` | yes | the provider's model ID, which may itself contain slashes |
 | | `tags` | no | addressable as `@tag`, filterable with `--tags` |
+| | `context` | no | context window in tokens |
+| | `output` | no | maximum tokens in one reply |
 
 An absent optional key means the default, never a broken file. `tags` is
-written only when the entry has any.
+written only when the entry has any, and the limits only when set.
+
+The limits describe the model as this endpoint serves it, which can differ
+from what the model supports: a local ollama may run with a smaller context,
+and a gateway may cap replies. Clients that need them, like opencode, get them
+from here.
 
 ### `models.secrets`
 
@@ -100,14 +109,15 @@ Three forms, tried in this order:
 | `mf endpoint list` | list endpoints, model counts, and whether a key is set |
 | `mf add <name> <endpoint> [<model>] [--tags a,b] [--key K]` | add a model entry; omit the ID to [pick one](#picking-a-model-id) |
 | `mf remove <name>` | remove a model entry, leaving the endpoint |
-| `mf get <name> <field>` | print `endpoint`, `url`, `api`, `key`, `model`, or `tags` |
+| `mf get <name> <field>` | print `endpoint`, `url`, `api`, `key`, `model`, `tags`, `context`, or `output` |
 | `mf get <name> --json` | print the whole entry as [JSON](#json-output), without the key |
-| `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, or `key` |
+| `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, `key`, `context`, or `output` (`0` removes a limit) |
 | `mf models <endpoint>` | model IDs the endpoint reports |
 | `mf sync <endpoint> [--tags a,b]` | upsert every reported model into `models.toml` |
 | `mf check [<name>] [--all]` | endpoint reachable and key accepted; exits non-zero on failure |
 | `mf ask <name> <message>` | one-shot message, for smoke-testing |
 | `mf exec <name> [--prefix P] -- <cmd>...` | run a command with the model's [settings in its environment](#mf-exec) |
+| `mf run opencode <model> [<more>...] [--small <name>] [-- <args>]` | run [opencode](#mf-run-opencode) with the named models |
 
 ### Picking a model ID
 
@@ -208,6 +218,28 @@ cannot reach the wrong endpoint. `--prefix SMOKE_` replaces `OPENAI_`, and
 sets `SMOKE_BASE_URL`, `SMOKE_MODEL`, and `SMOKE_API_KEY`. Only endpoints with
 the `openai` api are accepted.
 
+### `mf run opencode`
+
+```
+mf run opencode groq/qwen38 local/qwen35 --small local/qwen35 -- run "say hello"
+```
+
+Runs opencode with only the named models, and nothing is written to disk.
+The config goes into `OPENCODE_CONFIG_CONTENT`, which opencode merges over its
+own config files:
+
+- each endpoint becomes a provider, with only the named models in it and each
+  model's alias as its display name
+- the first model becomes `model`, and `--small` sets `small_model`
+- `context` and `output` become the model's `limit`; opencode needs both or
+  neither, so mf refuses an entry with only one
+- the key is passed as `MF_KEY_<ENDPOINT>` and referenced as
+  `{env:MF_KEY_<ENDPOINT>}`, so it never appears in the config
+
+Everything after `--` goes to opencode. Two named models on the same endpoint
+with different model-scoped keys are refused, since opencode has one key per
+provider.
+
 ### JSON output
 
 `mf list --json` prints an array, and `mf get <name> --json` prints one object:
@@ -220,11 +252,14 @@ the `openai` api are accepted.
   "api": "openai",
   "model": "gemini/gemini-2.5-flash",
   "tags": ["cheap"],
+  "context": 1048576,
+  "output": 65536,
   "has_key": true
 }
 ```
 
 The key is never included. Use `mf get <name> key` or `mf exec` for it.
+`context` and `output` are left out when unset.
 
 ## Argument conventions
 

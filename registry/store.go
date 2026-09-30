@@ -48,6 +48,10 @@ type Model struct {
 	Endpoint string   `toml:"endpoint"`
 	Model    string   `toml:"model"`
 	Tags     []string `toml:"tags,omitempty"`
+	// Context and Output are token limits for the context window and a
+	// single reply, as this endpoint serves the model. Zero means unset.
+	Context int `toml:"context,omitempty"`
+	Output  int `toml:"output,omitempty"`
 }
 
 // HasTag reports whether the entry carries tag.
