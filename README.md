@@ -94,18 +94,20 @@ Three forms, tried in this order:
 
 | Command | Purpose |
 |---|---|
-| `mf list [--tags a,b]` | list configured models (`--tags` requires *all* listed tags) |
+| `mf list [--tags a,b] [--json]` | list configured models (`--tags` requires *all* listed tags) |
 | `mf endpoint add <name> <url> [--key K]` | add an endpoint; prompts for the key |
 | `mf endpoint remove <name> [-f]` | remove an endpoint, its models, and its secrets |
 | `mf endpoint list` | list endpoints, model counts, and whether a key is set |
 | `mf add <name> <endpoint> [<model>] [--tags a,b] [--key K]` | add a model entry; omit the ID to [pick one](#picking-a-model-id) |
 | `mf remove <name>` | remove a model entry, leaving the endpoint |
-| `mf get <name> <field>` | print `endpoint`, `url`, `key`, `model`, or `tags` |
+| `mf get <name> <field>` | print `endpoint`, `url`, `api`, `key`, `model`, or `tags` |
+| `mf get <name> --json` | print the whole entry as [JSON](#json-output), without the key |
 | `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, or `key` |
 | `mf models <endpoint>` | model IDs the endpoint reports |
 | `mf sync <endpoint> [--tags a,b]` | upsert every reported model into `models.toml` |
 | `mf check [<name>] [--all]` | endpoint reachable and key accepted; exits non-zero on failure |
 | `mf ask <name> <message>` | one-shot message, for smoke-testing |
+| `mf exec <name> [--prefix P] -- <cmd>...` | run a command with the model's [settings in its environment](#mf-exec) |
 
 ### Picking a model ID
 
@@ -190,6 +192,40 @@ what is missing, merges `--tags` into entries it already owns, and **never
 rewrites an entry whose name is an alias for something else** — those are
 reported as skipped on stderr. Models that disappear upstream are not deleted.
 
+### `mf exec`
+
+`mf exec fast -- ofc run` replaces mf with `ofc run`, with three variables set:
+
+| Variable | Value |
+|---|---|
+| `OPENAI_BASE_URL` | the endpoint URL |
+| `OPENAI_MODEL` | the model ID |
+| `OPENAI_API_KEY` | the key |
+
+Inherited values of these variables are dropped. When no key is configured,
+`OPENAI_API_KEY` is removed from the environment, so a key from the shell
+cannot reach the wrong endpoint. `--prefix SMOKE_` replaces `OPENAI_`, and
+sets `SMOKE_BASE_URL`, `SMOKE_MODEL`, and `SMOKE_API_KEY`. Only endpoints with
+the `openai` api are accepted.
+
+### JSON output
+
+`mf list --json` prints an array, and `mf get <name> --json` prints one object:
+
+```json
+{
+  "name": "fast",
+  "endpoint": "bifrost",
+  "url": "https://gw.example.com/v1",
+  "api": "openai",
+  "model": "gemini/gemini-2.5-flash",
+  "tags": ["cheap"],
+  "has_key": true
+}
+```
+
+The key is never included. Use `mf get <name> key` or `mf exec` for it.
+
 ## Argument conventions
 
 A value that is always required is a positional argument. Flags are reserved
@@ -207,18 +243,19 @@ Supplying the wrong number of arguments prints what each one is, plus an
 example, rather than a count:
 
 ```
-$ mf get fast
-mf: get takes 2 arguments, you gave 1 argument
+$ mf ask fast
+mf: ask takes 2 arguments, you gave 1 argument
 
 usage:
-  mf get <name> <field>
+  mf ask <name> <message>
 
-  <name>   model to address: an alias (fast), an endpoint/model reference
-           (bifrost/gemini/gemini-2.5-flash), or a @tag (@coding)
-  <field>  field to print: endpoint, url, api, key, model, tags
+  <name>     model to address: an alias (fast), an endpoint/model reference
+             (bifrost/gemini/gemini-2.5-flash), or a @tag (@coding)
+  <message>  the message to send, as a single argument
+             (quote it if it contains spaces)
 
 example:
-  mf get fast url
+  mf ask fast "say hello"
 ```
 
 ## Environment

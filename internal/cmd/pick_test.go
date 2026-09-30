@@ -299,7 +299,8 @@ func runIn(t *testing.T, args ...string) (string, error) {
 	out := new(strings.Builder)
 	root.SetOut(out)
 	root.SetErr(new(strings.Builder))
-	return out.String(), root.Execute()
+	err := root.Execute()
+	return out.String(), err
 }
 
 // The picker draws; it cannot run down a pipe, so it says so instead of
