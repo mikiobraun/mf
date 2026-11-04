@@ -6,8 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mikiobraun/mf/internal/resolve"
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -48,11 +47,11 @@ func confirm(cmd *cobra.Command, question string) (bool, error) {
 }
 
 // endpointKeyState reports where an endpoint's key comes from, for display.
-func endpointKeyState(s *store.Store, endpoint string) (source string, ok bool) {
-	if v := os.Getenv(resolve.KeyEnvVar(endpoint)); v != "" {
-		return resolve.KeyEnvVar(endpoint), true
+func endpointKeyState(s *registry.Store, endpoint string) (source string, ok bool) {
+	if v := os.Getenv(registry.KeyEnvVar(endpoint)); v != "" {
+		return registry.KeyEnvVar(endpoint), true
 	}
-	if _, found := resolve.EndpointKey(s, endpoint); found {
+	if _, found := registry.EndpointKey(s, endpoint); found {
 		return "models.secrets", true
 	}
 	return "", false

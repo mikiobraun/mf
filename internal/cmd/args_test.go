@@ -26,20 +26,20 @@ func run(t *testing.T, args ...string) error {
 }
 
 func TestArgErrorNamesEachArgument(t *testing.T) {
-	err := run(t, "get", "fast")
+	err := run(t, "ask", "fast")
 	if err == nil {
 		t.Fatal("expected an error")
 	}
 	msg := err.Error()
 	for _, want := range []string{
-		"get takes 2 arguments, you gave 1 argument",
+		"ask takes 2 arguments, you gave 1 argument",
 		"usage:",
-		"mf get <name> <field>",
+		"mf ask <name> <message>",
 		"<name>",
-		"<field>",
-		"field to print: endpoint, url, api, key, model, tags",
+		"<message>",
+		"the message to send, as a single argument",
 		"example:",
-		"mf get fast url",
+		`mf ask fast "say hello"`,
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message missing %q:\n%s", want, msg)

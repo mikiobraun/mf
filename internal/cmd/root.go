@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -42,27 +42,29 @@ func NewRootCmd() *cobra.Command {
 		newSyncCmd(),
 		newCheckCmd(),
 		newAskCmd(),
+		newExecCmd(),
+		newRunCmd(),
 	)
 	return root
 }
 
 // openStore loads the registry from the configured directory.
-func openStore() (*store.Store, error) {
+func openStore() (*registry.Store, error) {
 	dir := configDir
 	if dir == "" {
 		var err error
-		if dir, err = store.DefaultDir(); err != nil {
+		if dir, err = registry.DefaultDir(); err != nil {
 			return nil, err
 		}
 	}
-	return store.Open(dir)
+	return registry.Open(dir)
 }
 
 // mustEndpoint looks up an endpoint, with a message listing the known ones.
-func mustEndpoint(s *store.Store, name string) (store.Endpoint, error) {
+func mustEndpoint(s *registry.Store, name string) (registry.Endpoint, error) {
 	ep, ok := s.Endpoint(name)
 	if !ok {
-		return store.Endpoint{}, fmt.Errorf("no endpoint named %q (known endpoints: %s)", name, s.EndpointNames())
+		return registry.Endpoint{}, fmt.Errorf("no endpoint named %q (known endpoints: %s)", name, s.EndpointNames())
 	}
 	return ep, nil
 }

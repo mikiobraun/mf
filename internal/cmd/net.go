@@ -7,18 +7,17 @@ import (
 	"strings"
 
 	"github.com/mikiobraun/mf/internal/provider"
-	"github.com/mikiobraun/mf/internal/resolve"
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 )
 
 // clientForEndpoint builds a client for a named endpoint, resolving its key.
-func clientForEndpoint(s *store.Store, name string) (provider.Client, error) {
+func clientForEndpoint(s *registry.Store, name string) (provider.Client, error) {
 	ep, err := mustEndpoint(s, name)
 	if err != nil {
 		return nil, err
 	}
-	key, _ := resolve.EndpointKey(s, name)
+	key, _ := registry.EndpointKey(s, name)
 	return provider.New(ep, key)
 }
 
@@ -86,7 +85,7 @@ func newSyncCmd() *cobra.Command {
 			for _, id := range ids {
 				existing, exists := s.Model(id)
 				if !exists {
-					s.PutModel(store.Model{
+					s.PutModel(registry.Model{
 						Name: id, Endpoint: epName, Model: id, Tags: newTags,
 					})
 					added++
@@ -176,7 +175,7 @@ func newCheckCmd() *cobra.Command {
 			w := newTabWriter(cmd.OutOrStdout())
 			var failed bool
 			for _, name := range targets {
-				ref, err := resolve.Resolve(s, name)
+				ref, err := registry.Resolve(s, name)
 				if err != nil {
 					fmt.Fprintf(w, "%s\t✗\t%s\n", name, err)
 					failed = true
@@ -207,7 +206,7 @@ func newCheckCmd() *cobra.Command {
 	return c
 }
 
-func checkEndpoint(ctx context.Context, s *store.Store, ref *resolve.Ref) (r struct {
+func checkEndpoint(ctx context.Context, s *registry.Store, ref *registry.Ref) (r struct {
 	ok  bool
 	msg string
 }) {
@@ -268,7 +267,7 @@ func newAskCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ref, err := resolve.Resolve(s, addr)
+			ref, err := registry.Resolve(s, addr)
 			if err != nil {
 				return err
 			}

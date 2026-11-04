@@ -1,21 +1,19 @@
-package resolve
+package registry
 
 import (
 	"testing"
-
-	"github.com/mikiobraun/mf/internal/store"
 )
 
-func testStore(t *testing.T) *store.Store {
+func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := store.Open(t.TempDir())
+	s, err := Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.PutEndpoint(store.Endpoint{Name: "anthropic", URL: "https://api.anthropic.com"})
-	s.PutEndpoint(store.Endpoint{Name: "bifrost", URL: "https://bifrost.example/v1"})
-	s.PutModel(store.Model{Name: "fast", Endpoint: "anthropic", Model: "claude-haiku-4-5", Tags: []string{"coding", "cheap"}})
-	s.PutModel(store.Model{Name: "smart", Endpoint: "anthropic", Model: "claude-opus-4-6", Tags: []string{"research", "coding"}})
+	s.PutEndpoint(Endpoint{Name: "anthropic", URL: "https://api.anthropic.com"})
+	s.PutEndpoint(Endpoint{Name: "bifrost", URL: "https://bifrost.example/v1"})
+	s.PutModel(Model{Name: "fast", Endpoint: "anthropic", Model: "claude-haiku-4-5", Tags: []string{"coding", "cheap"}})
+	s.PutModel(Model{Name: "smart", Endpoint: "anthropic", Model: "claude-opus-4-6", Tags: []string{"research", "coding"}})
 	return s
 }
 
@@ -74,7 +72,7 @@ func TestResolveErrors(t *testing.T) {
 
 func TestAliasWinsOverEndpointSlashModel(t *testing.T) {
 	s := testStore(t)
-	s.PutModel(store.Model{Name: "bifrost/weird", Endpoint: "anthropic", Model: "aliased"})
+	s.PutModel(Model{Name: "bifrost/weird", Endpoint: "anthropic", Model: "aliased"})
 	ref, err := Resolve(s, "bifrost/weird")
 	if err != nil {
 		t.Fatal(err)

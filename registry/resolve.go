@@ -1,13 +1,12 @@
-// Package resolve turns a user-supplied model address into a concrete
-// endpoint, model ID and API key.
-package resolve
+// Addressing: turning a user-supplied model address into a concrete endpoint,
+// model ID and API key.
+
+package registry
 
 import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/mikiobraun/mf/internal/store"
 )
 
 // Ref is a fully resolved model address.
@@ -17,9 +16,12 @@ type Ref struct {
 	// ModelID is the provider's model identifier.
 	ModelID string
 	// Endpoint is the endpoint the model lives on.
-	Endpoint store.Endpoint
+	Endpoint Endpoint
 	// Tags are the entry's tags; nil for direct endpoint/model references.
 	Tags []string
+	// Context and Output are the entry's token limits; zero when unset or
+	// for direct endpoint/model references.
+	Context, Output int
 	// Entry reports whether a [[model]] entry backs this reference. Only
 	// entries can carry model-scoped secrets.
 	Entry bool
@@ -35,7 +37,7 @@ type Ref struct {
 //
 // The endpoint/model form splits on the first slash only, so model IDs
 // containing slashes ("digitalocean/deepseek-v4-pro") resolve correctly.
-func Resolve(s *store.Store, addr string) (*Ref, error) {
+func Resolve(s *Store, addr string) (*Ref, error) {
 	if addr == "" {
 		return nil, fmt.Errorf("empty model address")
 	}
@@ -67,7 +69,7 @@ func Resolve(s *store.Store, addr string) (*Ref, error) {
 	return nil, fmt.Errorf("no model named %q", addr)
 }
 
-func resolveTag(s *store.Store, tag string) (*Ref, error) {
+func resolveTag(s *Store, tag string) (*Ref, error) {
 	matches := s.ModelsWithTag(tag)
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("no model tagged %q", tag)
@@ -82,7 +84,7 @@ func resolveTag(s *store.Store, tag string) (*Ref, error) {
 	return ref, nil
 }
 
-func fromEntry(s *store.Store, m store.Model) (*Ref, error) {
+func fromEntry(s *Store, m Model) (*Ref, error) {
 	ep, ok := s.Endpoint(m.Endpoint)
 	if !ok {
 		return nil, fmt.Errorf("model %q references unknown endpoint %q", m.Name, m.Endpoint)
@@ -92,6 +94,8 @@ func fromEntry(s *store.Store, m store.Model) (*Ref, error) {
 		ModelID:  m.Model,
 		Endpoint: ep,
 		Tags:     m.Tags,
+		Context:  m.Context,
+		Output:   m.Output,
 		Entry:    true,
 	}, nil
 }
@@ -104,7 +108,7 @@ func fromEntry(s *store.Store, m store.Model) (*Ref, error) {
 //
 // It reports ok=false when no key is configured; callers decide whether that
 // is fatal (a local ollama needs no key).
-func (r *Ref) Key(s *store.Store) (key string, ok bool) {
+func (r *Ref) Key(s *Store) (key string, ok bool) {
 	if v := os.Getenv(KeyEnvVar(r.Endpoint.Name)); v != "" {
 		return v, true
 	}
@@ -125,7 +129,7 @@ func (r *Ref) Key(s *store.Store) (key string, ok bool) {
 
 // EndpointKey resolves the key for a bare endpoint, used by commands that
 // address an endpoint rather than a model (models, sync).
-func EndpointKey(s *store.Store, endpoint string) (key string, ok bool) {
+func EndpointKey(s *Store, endpoint string) (key string, ok bool) {
 	if v := os.Getenv(KeyEnvVar(endpoint)); v != "" {
 		return v, true
 	}

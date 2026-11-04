@@ -1,6 +1,11 @@
-// Package store holds the on-disk model registry: models.toml (shareable
-// definitions) and models.secrets (API keys, never shared).
-package store
+// Package registry is the on-disk model registry and the lookups over it:
+// models.toml (shareable definitions), models.secrets (API keys, never
+// shared), and the addressing rules that turn a user-supplied model address
+// into an endpoint, a model ID and a key.
+//
+// It is the package other tools import to read the registry, so that each one
+// does not parse the files itself.
+package registry
 
 import (
 	"errors"
@@ -43,6 +48,10 @@ type Model struct {
 	Endpoint string   `toml:"endpoint"`
 	Model    string   `toml:"model"`
 	Tags     []string `toml:"tags,omitempty"`
+	// Context and Output are token limits for the context window and a
+	// single reply, as this endpoint serves the model. Zero means unset.
+	Context int `toml:"context,omitempty"`
+	Output  int `toml:"output,omitempty"`
 }
 
 // HasTag reports whether the entry carries tag.

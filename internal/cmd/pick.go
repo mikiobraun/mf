@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -40,7 +40,7 @@ var errNoSelection = errors.New("no model selected")
 var isTerminal = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
 // pickModelOnEndpoint asks the endpoint what it serves and prompts for one.
-func pickModelOnEndpoint(cmd *cobra.Command, s *store.Store, endpoint string) (string, error) {
+func pickModelOnEndpoint(cmd *cobra.Command, s *registry.Store, endpoint string) (string, error) {
 	client, err := clientForEndpoint(s, endpoint)
 	if err != nil {
 		return "", err

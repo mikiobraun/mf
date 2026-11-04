@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mikiobraun/mf/internal/store"
+	"github.com/mikiobraun/mf/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -37,9 +37,9 @@ func newEndpointAddCmd() *cobra.Command {
 				return fmt.Errorf("endpoint name %q must not contain a slash; it would be ambiguous with endpoint/model addressing", name)
 			}
 			switch api {
-			case store.APIOpenAI, store.APIAnthropic:
+			case registry.APIOpenAI, registry.APIAnthropic:
 			default:
-				return fmt.Errorf("--api must be %q or %q", store.APIOpenAI, store.APIAnthropic)
+				return fmt.Errorf("--api must be %q or %q", registry.APIOpenAI, registry.APIAnthropic)
 			}
 
 			s, err := openStore()
@@ -50,8 +50,8 @@ func newEndpointAddCmd() *cobra.Command {
 				return fmt.Errorf("endpoint %q already exists; use `mf endpoint remove %s` first", name, name)
 			}
 
-			ep := store.Endpoint{Name: name, URL: url}
-			if api != store.APIOpenAI {
+			ep := registry.Endpoint{Name: name, URL: url}
+			if api != registry.APIOpenAI {
 				ep.API = api
 			}
 			s.PutEndpoint(ep)
@@ -79,7 +79,7 @@ func newEndpointAddCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&key, "key", "", "API key (prompts if omitted)")
-	c.Flags().StringVar(&api, "api", store.APIOpenAI, "wire format: openai or anthropic")
+	c.Flags().StringVar(&api, "api", registry.APIOpenAI, "wire format: openai or anthropic")
 	return c
 }
 
