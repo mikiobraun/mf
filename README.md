@@ -114,6 +114,7 @@ Three forms, tried in this order:
 | `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, `key`, `context`, or `output` (`0` removes a limit) |
 | `mf tag add <name> <tag>...` | add tags to an entry, keeping the ones it has |
 | `mf tag remove <name> <tag>...` | remove tags from an entry; a tag it doesn't have is noted, not an error |
+| `mf tag swap <name> <tag>` | move a tag to an entry from the one entry that has it; a tag nobody has is added with a warning, a tag on several entries is refused |
 | `mf models <endpoint>` | model IDs the endpoint reports |
 | `mf sync <endpoint> [--tags a,b]` | upsert every reported model into `models.toml` |
 | `mf check [<name>] [--all]` | endpoint reachable and key accepted; exits non-zero on failure |

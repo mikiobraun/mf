@@ -71,3 +71,53 @@ func TestTagRejectsBadTagsAndUnknownModels(t *testing.T) {
 		t.Errorf("@ prefix: error %v should explain", err)
 	}
 }
+
+func TestTagSwapMovesTheTag(t *testing.T) {
+	dir := scriptingStore(t) // fast has tag cheap, llama has none
+
+	out, err := runIn(t, "--config", dir, "tag", "swap", "llama", "cheap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagsOf(t, dir, "fast"); got != nil {
+		t.Errorf("fast still has tags %v", got)
+	}
+	if got := tagsOf(t, dir, "llama"); !reflect.DeepEqual(got, []string{"cheap"}) {
+		t.Errorf("llama tags = %v, want [cheap]", got)
+	}
+	if out != "fast: \nllama: cheap\n" {
+		t.Errorf("swap printed %q", out)
+	}
+
+	// Swapping to the entry that already has it changes nothing.
+	if _, err := runIn(t, "--config", dir, "tag", "swap", "llama", "cheap"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tagsOf(t, dir, "llama"); !reflect.DeepEqual(got, []string{"cheap"}) {
+		t.Errorf("llama tags = %v after a no-op swap", got)
+	}
+}
+
+func TestTagSwapGivesANewTag(t *testing.T) {
+	dir := scriptingStore(t)
+	if _, err := runIn(t, "--config", dir, "tag", "swap", "llama", "fresh"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tagsOf(t, dir, "llama"); !reflect.DeepEqual(got, []string{"fresh"}) {
+		t.Errorf("llama tags = %v, want [fresh]", got)
+	}
+}
+
+func TestTagSwapRefusesATagOnSeveralEntries(t *testing.T) {
+	dir := scriptingStore(t)
+	if _, err := runIn(t, "--config", dir, "tag", "add", "llama", "cheap"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runIn(t, "--config", dir, "tag", "swap", "fast", "cheap")
+	if err == nil || !strings.Contains(err.Error(), "fast, llama") {
+		t.Errorf("err = %v, want a refusal naming both entries", err)
+	}
+	if got := tagsOf(t, dir, "llama"); !reflect.DeepEqual(got, []string{"cheap"}) {
+		t.Errorf("the refused swap changed llama: %v", got)
+	}
+}
