@@ -112,6 +112,8 @@ Three forms, tried in this order:
 | `mf get <name> <field>` | print `endpoint`, `url`, `api`, `key`, `model`, `tags`, `context`, or `output` |
 | `mf get <name> --json` | print the whole entry as [JSON](#json-output), without the key |
 | `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, `key`, `context`, or `output` (`0` removes a limit) |
+| `mf tag add <name> <tag>...` | add tags to an entry, keeping the ones it has |
+| `mf tag remove <name> <tag>...` | remove tags from an entry; a tag it doesn't have is noted, not an error |
 | `mf models <endpoint>` | model IDs the endpoint reports |
 | `mf sync <endpoint> [--tags a,b]` | upsert every reported model into `models.toml` |
 | `mf check [<name>] [--all]` | endpoint reachable and key accepted; exits non-zero on failure |
