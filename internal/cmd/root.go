@@ -38,6 +38,7 @@ func NewRootCmd() *cobra.Command {
 		newRemoveCmd(),
 		newGetCmd(),
 		newSetCmd(),
+		newTagCmd(),
 		newModelsCmd(),
 		newSyncCmd(),
 		newCheckCmd(),
