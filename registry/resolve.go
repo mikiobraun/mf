@@ -22,6 +22,9 @@ type Ref struct {
 	// Context and Output are the entry's token limits; zero when unset or
 	// for direct endpoint/model references.
 	Context, Output int
+	// Vision reports whether the entry says the model takes images; false
+	// for direct endpoint/model references.
+	Vision bool
 	// Entry reports whether a [[model]] entry backs this reference. Only
 	// entries can carry model-scoped secrets.
 	Entry bool
@@ -96,6 +99,7 @@ func fromEntry(s *Store, m Model) (*Ref, error) {
 		Tags:     m.Tags,
 		Context:  m.Context,
 		Output:   m.Output,
+		Vision:   m.Vision,
 		Entry:    true,
 	}, nil
 }
