@@ -106,7 +106,7 @@ func newRemoveCmd() *cobra.Command {
 }
 
 // setFields are the fields `mf set` accepts, in help order.
-var setFields = []string{"endpoint", "model", "tags", "key", "context", "output"}
+var setFields = []string{"endpoint", "model", "tags", "key", "context", "output", "vision"}
 
 func newSetCmd() *cobra.Command {
 	return &cobra.Command{
@@ -115,7 +115,8 @@ func newSetCmd() *cobra.Command {
 		Long: "Update a field on an existing model entry.\n\nFields: " + strings.Join(setFields, ", ") +
 			"\n\nOmitting the value for the model field picks one from the endpoint's\nown list." +
 			"\n\ncontext and output are token limits for the context window and a single\n" +
-			"reply, as this endpoint serves the model. 0 removes a limit.",
+			"reply, as this endpoint serves the model. 0 removes a limit." +
+			"\n\nvision is true if the model takes images as input, as this endpoint\nserves it; false removes it.",
 		Args: argHelp{
 			min: 2, max: 3,
 			args: [][2]string{
@@ -176,6 +177,15 @@ func newSetCmd() *cobra.Command {
 					m.Context = n
 				} else {
 					m.Output = n
+				}
+			case "vision":
+				switch value {
+				case "true":
+					m.Vision = true
+				case "false":
+					m.Vision = false
+				default:
+					return fmt.Errorf("vision must be true or false; got %q", value)
 				}
 			case "key":
 				s.PutSecret(m.Endpoint, m.Name, value)

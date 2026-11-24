@@ -39,6 +39,7 @@ model    = 'gemini/gemini-2.5-flash'    # the provider's own model ID
 tags     = ['coding', 'cheap']          # omitted entirely when empty
 context  = 1048576                      # token limits, as this endpoint serves the model
 output   = 65536
+vision   = true                         # takes images, as this endpoint serves the model
 ```
 
 | Table | Key | Required | Notes |
@@ -51,14 +52,16 @@ output   = 65536
 | | `tags` | no | addressable as `@tag`, filterable with `--tags` |
 | | `context` | no | context window in tokens |
 | | `output` | no | maximum tokens in one reply |
+| | `vision` | no | `true` if the model takes images as input |
 
 An absent optional key means the default, never a broken file. `tags` is
-written only when the entry has any, and the limits only when set.
+written only when the entry has any, the limits only when set, and `vision`
+only when true.
 
-The limits describe the model as this endpoint serves it, which can differ
-from what the model supports: a local ollama may run with a smaller context,
-and a gateway may cap replies. Clients that need them, like opencode, get them
-from here.
+The limits and `vision` describe the model as this endpoint serves it, which
+can differ from what the model supports: a local ollama may run with a smaller
+context, a gateway may cap replies or drop images. Clients that need them, like
+opencode or ofc, get them from here.
 
 ### `models.secrets`
 
@@ -109,9 +112,9 @@ Three forms, tried in this order:
 | `mf endpoint list` | list endpoints, model counts, and whether a key is set |
 | `mf add <name> <endpoint> [<model>] [--tags a,b] [--key K]` | add a model entry; omit the ID to [pick one](#picking-a-model-id) |
 | `mf remove <name>` | remove a model entry, leaving the endpoint |
-| `mf get <name> <field>` | print `endpoint`, `url`, `api`, `key`, `model`, `tags`, `context`, or `output` |
+| `mf get <name> <field>` | print `endpoint`, `url`, `api`, `key`, `model`, `tags`, `context`, `output`, or `vision` |
 | `mf get <name> --json` | print the whole entry as [JSON](#json-output), without the key |
-| `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, `key`, `context`, or `output` (`0` removes a limit) |
+| `mf set <name> <field> [<value>]` | update `endpoint`, `model`, `tags`, `key`, `context`, `output` (`0` removes a limit), or `vision` (`true`/`false`) |
 | `mf tag add <name> <tag>...` | add tags to an entry, keeping the ones it has |
 | `mf tag remove <name> <tag>...` | remove tags from an entry; a tag it doesn't have is noted, not an error |
 | `mf tag swap <name> <tag>` | move a tag to an entry from the one entry that has it; a tag nobody has is added with a warning, a tag on several entries is refused |
@@ -257,12 +260,13 @@ provider.
   "tags": ["cheap"],
   "context": 1048576,
   "output": 65536,
+  "vision": true,
   "has_key": true
 }
 ```
 
 The key is never included. Use `mf get <name> key` or `mf exec` for it.
-`context` and `output` are left out when unset.
+`context` and `output` are left out when unset, `vision` when false.
 
 ## Argument conventions
 

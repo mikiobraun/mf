@@ -52,6 +52,9 @@ type Model struct {
 	// single reply, as this endpoint serves the model. Zero means unset.
 	Context int `toml:"context,omitempty"`
 	Output  int `toml:"output,omitempty"`
+	// Vision says the model takes images as input, as this endpoint serves
+	// it. False means unset: not known to take images.
+	Vision bool `toml:"vision,omitempty"`
 }
 
 // HasTag reports whether the entry carries tag.

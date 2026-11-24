@@ -12,7 +12,7 @@ import (
 )
 
 // getFields are the fields `mf get` can print, in help order.
-var getFields = []string{"endpoint", "url", "api", "key", "model", "tags", "context", "output"}
+var getFields = []string{"endpoint", "url", "api", "key", "model", "tags", "context", "output", "vision"}
 
 func newGetCmd() *cobra.Command {
 	var asJSON bool
@@ -69,6 +69,8 @@ func newGetCmd() *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), limitString(ref.Context))
 			case "output":
 				fmt.Fprintln(cmd.OutOrStdout(), limitString(ref.Output))
+			case "vision":
+				fmt.Fprintln(cmd.OutOrStdout(), strconv.FormatBool(ref.Vision))
 			case "key":
 				key, ok := ref.Key(s)
 				if !ok {
@@ -98,6 +100,7 @@ type entryJSON struct {
 	Tags     []string `json:"tags"`
 	Context  int      `json:"context,omitempty"`
 	Output   int      `json:"output,omitempty"`
+	Vision   bool     `json:"vision,omitempty"`
 	HasKey   bool     `json:"has_key"`
 }
 
@@ -125,6 +128,7 @@ func newEntryJSON(s *registry.Store, ref *registry.Ref) entryJSON {
 		Tags:     tags,
 		Context:  ref.Context,
 		Output:   ref.Output,
+		Vision:   ref.Vision,
 		HasKey:   hasKey,
 	}
 }
